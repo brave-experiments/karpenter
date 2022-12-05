@@ -543,6 +543,11 @@ func filterExoticInstanceTypes(instanceTypes []*cloudprovider.InstanceType) []*c
 			!resources.IsZero(it.Capacity[v1alpha1.ResourceHabanaGaudi]) {
 			continue
 		}
+		if it.Requirements.Keys().Has("aws.ec2.nitro/nitro_enclaves") {
+			if !resources.IsZero(it.Capacity[v1alpha1.ResourceAWSNitroEnclaves]) {
+				continue
+			}
+		}
 		genericInstanceTypes = append(genericInstanceTypes, it)
 	}
 	// if we got some subset of instance types, then prefer to use those

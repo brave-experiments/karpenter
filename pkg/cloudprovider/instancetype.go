@@ -47,6 +47,13 @@ var (
 	instanceTypeScheme = regexp.MustCompile(`(^[a-z]+)(\-[0-9]+tb)?([0-9]+).*\.`)
 )
 
+type instanceTypeParts struct {
+	category   string
+	generation string
+	family     string
+	size       string
+}
+
 func NewInstanceType(ctx context.Context, info *ec2.InstanceTypeInfo, kc *v1alpha5.KubeletConfiguration,
 	region string, nodeTemplate *v1alpha1.AWSNodeTemplate, offerings cloudprovider.Offerings) *cloudprovider.InstanceType {
 
@@ -92,15 +99,14 @@ func computeRequirements(ctx context.Context, info *ec2.InstanceTypeInfo, offeri
 		scheduling.NewRequirement(v1alpha1.LabelInstanceEncryptionInTransitSupported, v1.NodeSelectorOpIn, fmt.Sprint(aws.BoolValue(info.NetworkInfo.EncryptionInTransitSupported))),
 	)
 	// Instance Type Labels
-	instanceFamilyParts := instanceTypeScheme.FindStringSubmatch(aws.StringValue(info.InstanceType))
-	if len(instanceFamilyParts) == 4 {
-		requirements[v1alpha1.LabelInstanceCategory].Insert(instanceFamilyParts[1])
-		requirements[v1alpha1.LabelInstanceGeneration].Insert(instanceFamilyParts[3])
+	parts := getInstanceTypeParts(info)
+	if parts.category != "" && parts.generation != "" {
+		requirements[v1alpha1.LabelInstanceCategory].Insert(parts.category)
+		requirements[v1alpha1.LabelInstanceGeneration].Insert(parts.generation)
 	}
-	instanceTypeParts := strings.Split(aws.StringValue(info.InstanceType), ".")
-	if len(instanceTypeParts) == 2 {
-		requirements.Get(v1alpha1.LabelInstanceFamily).Insert(instanceTypeParts[0])
-		requirements.Get(v1alpha1.LabelInstanceSize).Insert(instanceTypeParts[1])
+	if parts.family != "" && parts.size != "" {
+		requirements[v1alpha1.LabelInstanceFamily].Insert(parts.family)
+		requirements[v1alpha1.LabelInstanceSize].Insert(parts.size)
 	}
 	if info.InstanceStorageInfo != nil && aws.StringValue(info.InstanceStorageInfo.NvmeSupport) != ec2.EphemeralNvmeSupportUnsupported {
 		requirements[v1alpha1.LabelInstanceLocalNVME].Insert(fmt.Sprint(aws.Int64Value(info.InstanceStorageInfo.TotalSizeInGB)))
@@ -116,6 +122,21 @@ func computeRequirements(ctx context.Context, info *ec2.InstanceTypeInfo, offeri
 	return requirements
 }
 
+func getInstanceTypeParts(info *ec2.InstanceTypeInfo) instanceTypeParts {
+	var parts instanceTypeParts
+	instanceFamilyParts := instanceTypeScheme.FindStringSubmatch(aws.StringValue(info.InstanceType))
+	if len(instanceFamilyParts) == 4 {
+		parts.category = instanceFamilyParts[1]
+		parts.generation = instanceFamilyParts[3]
+	}
+	instanceTypeParts := strings.Split(aws.StringValue(info.InstanceType), ".")
+	if len(instanceTypeParts) == 2 {
+		parts.family = instanceTypeParts[0]
+		parts.size = instanceTypeParts[1]
+	}
+	return parts
+}
+
 func getArchitecture(info *ec2.InstanceTypeInfo) string {
 	for _, architecture := range info.ProcessorInfo.SupportedArchitectures {
 		if value, ok := v1alpha1.AWSToKubeArchitectures[aws.StringValue(architecture)]; ok {
@@ -129,15 +150,16 @@ func computeCapacity(ctx context.Context, info *ec2.InstanceTypeInfo, amiFamily 
 	blockDeviceMappings []*v1alpha1.BlockDeviceMapping, kc *v1alpha5.KubeletConfiguration) v1.ResourceList {
 
 	return v1.ResourceList{
-		v1.ResourceCPU:               *cpu(info),
-		v1.ResourceMemory:            *memory(ctx, info),
-		v1.ResourceEphemeralStorage:  *ephemeralStorage(amiFamily, blockDeviceMappings),
-		v1.ResourcePods:              *pods(ctx, info, amiFamily, kc),
-		v1alpha1.ResourceAWSPodENI:   *awsPodENI(ctx, aws.StringValue(info.InstanceType)),
-		v1alpha1.ResourceNVIDIAGPU:   *nvidiaGPUs(info),
-		v1alpha1.ResourceAMDGPU:      *amdGPUs(info),
-		v1alpha1.ResourceAWSNeuron:   *awsNeurons(info),
-		v1alpha1.ResourceHabanaGaudi: *habanaGaudis(info),
+		v1.ResourceCPU:                    *cpu(info),
+		v1.ResourceMemory:                 *memory(ctx, info),
+		v1.ResourceEphemeralStorage:       *ephemeralStorage(amiFamily, blockDeviceMappings),
+		v1.ResourcePods:                   *pods(ctx, info, amiFamily, kc),
+		v1alpha1.ResourceAWSPodENI:        *awsPodENI(ctx, aws.StringValue(info.InstanceType)),
+		v1alpha1.ResourceNVIDIAGPU:        *nvidiaGPUs(info),
+		v1alpha1.ResourceAMDGPU:           *amdGPUs(info),
+		v1alpha1.ResourceAWSNeuron:        *awsNeurons(info),
+		v1alpha1.ResourceHabanaGaudi:      *habanaGaudis(info),
+		v1alpha1.ResourceAWSNitroEnclaves: *awsNitroEnclaves(info),
 	}
 }
 
@@ -220,6 +242,29 @@ func habanaGaudis(info *ec2.InstanceTypeInfo) *resource.Quantity {
 		for _, gpu := range info.GpuInfo.Gpus {
 			if *gpu.Manufacturer == "Habana" {
 				count += *gpu.Count
+			}
+		}
+	}
+	return resources.Quantity(fmt.Sprint(count))
+}
+
+func awsNitroEnclaves(info *ec2.InstanceTypeInfo) *resource.Quantity {
+	count := int64(0)
+	architecture := getArchitecture(info)
+	hypervisor := aws.StringValue(info.Hypervisor)
+	parts := getInstanceTypeParts(info)
+	cpus := cpu(info)
+
+	if architecture == v1alpha5.ArchitectureAmd64 && hypervisor == "nitro" {
+		if !lo.Contains([]string{"t3", "t3a", "u-"}, parts.category) {
+			if cpus.Value() >= 4 {
+				count = 1
+			}
+		}
+	} else if architecture == v1alpha5.ArchitectureArm64 && hypervisor == "nitro" {
+		if !lo.Contains([]string{"a1", "t4g", "g5g", "im4gn", "is4gen"}, parts.category) {
+			if cpus.Value() >= 2 {
+				count = 1
 			}
 		}
 	}
