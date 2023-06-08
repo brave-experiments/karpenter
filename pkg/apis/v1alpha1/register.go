@@ -76,6 +76,7 @@ var (
 	LabelInstanceGPUCount                     = LabelDomain + "/instance-gpu-count"
 	LabelInstanceGPUMemory                    = LabelDomain + "/instance-gpu-memory"
 	LabelInstanceAMIID                        = LabelDomain + "/instance-ami-id"
+	LabelInstanceNitroEnclaveDS               = "aws-nitro-enclaves-k8s-dp"
 
 	InterruptionInfrastructureFinalizer = Group + "/interruption-infrastructure"
 )
@@ -113,5 +114,6 @@ func init() {
 		LabelInstanceGPUManufacturer,
 		LabelInstanceGPUCount,
 		LabelInstanceGPUMemory,
+		LabelInstanceNitroEnclaveDS,
 	)
 }
