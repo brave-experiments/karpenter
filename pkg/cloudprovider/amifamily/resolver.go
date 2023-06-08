@@ -66,6 +66,7 @@ type LaunchTemplate struct {
 	AMIID               string
 	InstanceTypes       []*cloudprovider.InstanceType `hash:"ignore"`
 	DetailedMonitoring  bool
+	EnclaveEnabled      bool
 }
 
 // AMIFamily can be implemented to override the default logic for generating dynamic launch template parameters
@@ -128,6 +129,7 @@ func (r Resolver) Resolve(ctx context.Context, nodeTemplate *v1alpha1.AWSNodeTem
 			DetailedMonitoring:  aws.BoolValue(nodeTemplate.Spec.DetailedMonitoring),
 			AMIID:               amiID,
 			InstanceTypes:       instanceTypes,
+			EnclaveEnabled:      !machine.Spec.Resources.Requests.Name("aws.ec2.nitro/nitro_enclaves", resource.DecimalSI).IsZero(),
 		}
 		if resolved.BlockDeviceMappings == nil {
 			resolved.BlockDeviceMappings = amiFamily.DefaultBlockDeviceMappings()

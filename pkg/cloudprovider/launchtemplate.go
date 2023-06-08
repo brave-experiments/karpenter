@@ -219,6 +219,9 @@ func (p *LaunchTemplateProvider) createLaunchTemplate(ctx context.Context, optio
 			TagSpecifications: []*ec2.LaunchTemplateTagSpecificationRequest{
 				{ResourceType: aws.String(ec2.ResourceTypeNetworkInterface), Tags: v1alpha1.MergeTags(ctx, options.Tags)},
 			},
+			EnclaveOptions: &ec2.LaunchTemplateEnclaveOptionsRequest{
+				Enabled: aws.Bool(options.EnclaveEnabled),
+			},
 		},
 		TagSpecifications: []*ec2.TagSpecification{
 			{
