@@ -381,7 +381,7 @@ var _ = Describe("Instance Types", func() {
 	It("should launch instances for Nitro Enclave Resource Requests", func() {
 		nodeNames := sets.NewString()
 		ExpectApplied(ctx, env.Client, provisioner, nodeTemplate)
-		for _, pod := range ExpectProvisioned(ctx, env.Client, recorder, provisioningController, prov,
+		pods := []*v1.Pod{
 			coretest.UnschedulablePod(coretest.PodOptions{
 				NodeSelector: map[string]string{
 					v1.LabelInstanceTypeStable: "m5.xlarge",
@@ -390,7 +390,10 @@ var _ = Describe("Instance Types", func() {
 					Requests: v1.ResourceList{v1alpha1.ResourceAWSNitroEnclaves: resource.MustParse("1")},
 					Limits:   v1.ResourceList{v1alpha1.ResourceAWSNitroEnclaves: resource.MustParse("1")},
 				},
-			})) {
+			}),
+		}
+		ExpectProvisioned(ctx, env.Client, cluster, prov, pods...)
+		for _, pod := range pods {
 			node := ExpectScheduled(ctx, env.Client, pod)
 			Expect(node.Labels).To(HaveKeyWithValue(v1.LabelInstanceTypeStable, "m5.xlarge"))
 			nodeNames.Insert(node.Name)
@@ -399,7 +402,7 @@ var _ = Describe("Instance Types", func() {
 	})
 	It("should not launch instances for Nitro Enclave when node requirements not met", func() {
 		ExpectApplied(ctx, env.Client, provisioner, nodeTemplate)
-		for _, pod := range ExpectProvisioned(ctx, env.Client, recorder, provisioningController, prov,
+		pods := []*v1.Pod{
 			coretest.UnschedulablePod(coretest.PodOptions{
 				NodeSelector: map[string]string{
 					v1.LabelInstanceTypeStable: "t3.large",
@@ -408,7 +411,10 @@ var _ = Describe("Instance Types", func() {
 					Requests: v1.ResourceList{v1alpha1.ResourceAWSNitroEnclaves: resource.MustParse("1")},
 					Limits:   v1.ResourceList{v1alpha1.ResourceAWSNitroEnclaves: resource.MustParse("1")},
 				},
-			})) {
+			}),
+		}
+		ExpectProvisioned(ctx, env.Client, cluster, prov, pods...)
+		for _, pod := range pods {
 			ExpectNotScheduled(ctx, env.Client, pod)
 		}
 	})

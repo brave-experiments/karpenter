@@ -160,6 +160,7 @@ func computeCapacity(ctx context.Context, info *ec2.InstanceTypeInfo, amiFamily 
 		v1alpha1.ResourceAWSNeuron:        *awsNeurons(info),
 		v1alpha1.ResourceHabanaGaudi:      *habanaGaudis(info),
 		v1alpha1.ResourceAWSNitroEnclaves: *awsNitroEnclaves(info),
+		v1alpha1.ResourceHugePages2Mi:     *memory(ctx, info),
 	}
 }
 
